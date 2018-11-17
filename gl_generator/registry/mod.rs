@@ -19,7 +19,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io;
-use std::ops::Add;
 
 use Generator;
 
@@ -109,15 +108,18 @@ pub struct GlxOpcode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Registry {
     pub api: Api,
-    pub enums: BTreeSet<Enum>,
-    pub cmds: BTreeSet<Cmd>,
+    pub load_enums: BTreeSet<Enum>,
+    pub load_cmds: BTreeSet<Cmd>,
+    pub ptr_enums: BTreeSet<Enum>,
+    pub ptr_cmds: BTreeSet<Cmd>,
     pub aliases: BTreeMap<String, Vec<String>>,
 }
 
 impl Registry {
     pub fn new<'a, Exts>(
         api: Api,
-        version: (u8, u8),
+        load_version: (u8, u8),
+        ptr_version: (u8, u8),
         profile: Profile,
         fallbacks: Fallbacks,
         extensions: Exts,
@@ -125,14 +127,16 @@ impl Registry {
     where
         Exts: AsRef<[&'a str]>,
     {
-        let (major, minor) = version;
+        let (lmajor, lminor) = load_version;
+        let (pmajor, pminor) = ptr_version;
         let extensions = extensions.as_ref().iter().map(<&str>::to_string).collect();
 
         let filter = parse::Filter {
             api: api,
             fallbacks: fallbacks,
             extensions: extensions,
-            version: format!("{}.{}", major, minor),
+            load_version: format!("{}.{}", lmajor, lminor),
+            ptr_version: format!("{}.{}", pmajor, pminor),
             profile: profile,
         };
 
@@ -152,29 +156,5 @@ impl Registry {
         W: io::Write,
     {
         generator.write(&self, output)
-    }
-
-    /// Returns a set of all the types used in the supplied registry. This is useful
-    /// for working out what conversions are needed for the specific registry.
-    pub fn get_tys(&self) -> BTreeSet<&str> {
-        let mut tys = BTreeSet::new();
-        for def in &self.cmds {
-            tys.insert(def.proto.ty.as_ref());
-            for param in &def.params {
-                tys.insert(param.ty.as_ref());
-            }
-        }
-        tys
-    }
-}
-
-impl Add for Registry {
-    type Output = Registry;
-
-    fn add(mut self, other: Registry) -> Registry {
-        self.enums.extend(other.enums);
-        self.cmds.extend(other.cmds);
-        self.aliases.extend(other.aliases);
-        self
     }
 }

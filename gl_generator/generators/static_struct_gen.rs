@@ -75,7 +75,7 @@ fn write_enums<W>(registry: &Registry, dest: &mut W) -> io::Result<()>
 where
     W: io::Write,
 {
-    for enm in &registry.enums {
+    for enm in &registry.ptr_enums {
         try!(super::gen_enum_item(enm, "types::", dest));
     }
 
@@ -114,7 +114,7 @@ where
         api = super::gen_struct_name(registry.api),
     ));
 
-    for cmd in &registry.cmds {
+    for cmd in &registry.load_cmds {
         try!(writeln!(
             dest,
             "#[allow(non_snake_case)]
@@ -150,7 +150,7 @@ where
         extern \"system\" {{"
     ));
 
-    for cmd in &registry.cmds {
+    for cmd in &registry.load_cmds {
         try!(writeln!(
             dest,
             "#[link_name=\"{symbol}\"] fn {name}({params}) -> {return_suffix};",
@@ -159,6 +159,18 @@ where
             params = super::gen_parameters(cmd, true, true).join(", "),
             return_suffix = cmd.proto.ty,
         ));
+    }
+
+    for cmd in &registry.ptr_cmds {
+        if !registry.load_cmds.contains(&cmd) {
+            try!(writeln!(
+                dest,
+                "fn {name}({params}) -> {return_suffix} {{ panic!() }}",
+                name = cmd.proto.ident,
+                params = super::gen_parameters(cmd, true, true).join(", "),
+                return_suffix = cmd.proto.ty,
+            ));
+        }
     }
 
     writeln!(dest, "}}")

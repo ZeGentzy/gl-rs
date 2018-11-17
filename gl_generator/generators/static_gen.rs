@@ -78,7 +78,7 @@ fn write_enums<W>(registry: &Registry, dest: &mut W) -> io::Result<()>
 where
     W: io::Write,
 {
-    for enm in &registry.enums {
+    for enm in &registry.ptr_enums {
         try!(super::gen_enum_item(enm, "types::", dest));
     }
 
@@ -99,7 +99,7 @@ where
         extern \"system\" {{"
     ));
 
-    for cmd in &registry.cmds {
+    for cmd in &registry.load_cmds {
         try!(writeln!(
             dest,
             "#[link_name=\"{symbol}\"]
@@ -109,6 +109,18 @@ where
             params = super::gen_parameters(cmd, true, true).join(", "),
             return_suffix = cmd.proto.ty,
         ));
+    }
+
+    for cmd in &registry.ptr_cmds {
+        if !registry.load_cmds.contains(&cmd) {
+            try!(writeln!(
+                dest,
+                "pub fn {name}({params}) -> {return_suffix} {{ panic!() }}",
+                name = cmd.proto.ident,
+                params = super::gen_parameters(cmd, true, true).join(", "),
+                return_suffix = cmd.proto.ty,
+            ));
+        }
     }
 
     writeln!(dest, "}}")

@@ -77,7 +77,7 @@ fn write_enums<W>(registry: &Registry, dest: &mut W) -> io::Result<()>
 where
     W: io::Write,
 {
-    for enm in &registry.enums {
+    for enm in &registry.ptr_enums {
         try!(super::gen_enum_item(enm, "types::", dest));
     }
 
@@ -160,7 +160,7 @@ where
         api = super::gen_struct_name(registry.api)
     ));
 
-    for cmd in &registry.cmds {
+    for cmd in &registry.ptr_cmds {
         if let Some(v) = registry.aliases.get(&cmd.proto.ident) {
             try!(writeln!(dest, "/// Fallbacks: {}", v.join(", ")));
         }
@@ -206,7 +206,7 @@ where
                 {api} {{",
                   api = super::gen_struct_name(registry.api)));
 
-    for cmd in &registry.cmds {
+    for cmd in &registry.load_cmds {
         try!(writeln!(
             dest,
             "{name}: FnPtr::new(metaloadfn(\"{symbol}\", &[{fallbacks}])),",
@@ -223,6 +223,16 @@ where
         ))
     }
 
+    for cmd in &registry.ptr_cmds {
+        if !registry.load_cmds.contains(&cmd) {
+            try!(writeln!(
+                dest,
+                "{name}: FnPtr::new(std::ptr::null()),",
+                name = cmd.proto.ident,
+            ))
+        }
+    }
+
     try!(writeln!(dest, "_priv: ()"));
 
     try!(writeln!(
@@ -231,7 +241,7 @@ where
         }}"
     ));
 
-    for cmd in &registry.cmds {
+    for cmd in &registry.ptr_cmds {
         try!(writeln!(dest,
             "#[allow(non_snake_case, unused_variables, dead_code)]
             #[inline] pub unsafe fn {name}(&self, {params}) -> {return_suffix} {{ \

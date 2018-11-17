@@ -283,7 +283,8 @@ pub struct Filter {
     pub fallbacks: Fallbacks,
     pub extensions: BTreeSet<String>,
     pub profile: Profile,
-    pub version: String,
+    pub load_version: String,
+    pub ptr_version: String,
 }
 
 trait Parse: Sized + Iterator<Item = ParseEvent> {
@@ -339,74 +340,90 @@ trait Parse: Sized + Iterator<Item = ParseEvent> {
             }
         }
 
-        let mut desired_enums = BTreeSet::new();
-        let mut desired_cmds = BTreeSet::new();
+        let get_funcs = |load| -> (BTreeSet<Enum>, BTreeSet<Cmd>) {
+            let mut desired_enums = BTreeSet::new();
+            let mut desired_cmds = BTreeSet::new();
+            let version = if load { filter.load_version.clone() } else { filter.ptr_version.clone() };
 
-        // find the features we want
-        let mut found_feature = false;
-        for feature in &features {
-            // XXX: verify that the string comparison with <= actually works as desired
-            if feature.api == filter.api && feature.number <= filter.version {
-                for require in &feature.requires {
-                    desired_enums.extend(require.enums.iter().map(|x| x.clone()));
-                    desired_cmds.extend(require.commands.iter().map(|x| x.clone()));
-                }
+            // find the features we want
+            let mut found_feature = false;
+            for feature in &features {
+                // XXX: verify that the string comparison with <= actually works as desired
+                if feature.api == filter.api && feature.number <= version {
+                    for require in &feature.requires {
+                        desired_enums.extend(require.enums.iter().map(|x| x.clone()));
+                        desired_cmds.extend(require.commands.iter().map(|x| x.clone()));
+                    }
 
-                for remove in &feature.removes {
-                    if remove.profile == filter.profile {
-                        for enm in &remove.enums {
-                            debug!("Removing {}", enm);
-                            desired_enums.remove(enm);
-                        }
-                        for cmd in &remove.commands {
-                            debug!("Removing {}", cmd);
-                            desired_cmds.remove(cmd);
+                    for remove in &feature.removes {
+                        if remove.profile == filter.profile {
+                            for enm in &remove.enums {
+                                debug!("Removing {}", enm);
+                                desired_enums.remove(enm);
+                            }
+                            for cmd in &remove.commands {
+                                debug!("Removing {}", cmd);
+                                desired_cmds.remove(cmd);
+                            }
                         }
                     }
                 }
-            }
-            if feature.number == filter.version {
-                found_feature = true;
-            }
-        }
-
-        if !found_feature {
-            panic!("Did not find version {} in the registry", filter.version);
-        }
-
-        for extension in &extensions {
-            if filter.extensions.contains(&extension.name) {
-                if !extension.supported.contains(&filter.api) {
-                    panic!(
-                        "Requested {}, which doesn't support the {} API",
-                        extension.name, filter.api
-                    );
-                }
-                for require in &extension.requires {
-                    desired_enums.extend(require.enums.iter().map(|x| x.clone()));
-                    desired_cmds.extend(require.commands.iter().map(|x| x.clone()));
+                if feature.number == version {
+                    found_feature = true;
                 }
             }
-        }
 
-        let is_desired_enum = |e: &Enum| {
-            desired_enums.contains(&("GL_".to_string() + &e.ident))
-                || desired_enums.contains(&("WGL_".to_string() + &e.ident))
-                || desired_enums.contains(&("GLX_".to_string() + &e.ident))
-                || desired_enums.contains(&("EGL_".to_string() + &e.ident))
+            if !found_feature {
+                panic!("Did not find version {} in the registry", version);
+            }
+
+            for extension in &extensions {
+                if filter.extensions.contains(&extension.name) {
+                    if !extension.supported.contains(&filter.api) {
+                        panic!(
+                            "Requested {}, which doesn't support the {} API",
+                            extension.name, filter.api
+                        );
+                    }
+                    for require in &extension.requires {
+                        desired_enums.extend(require.enums.iter().map(|x| x.clone()));
+                        desired_cmds.extend(require.commands.iter().map(|x| x.clone()));
+                    }
+                }
+            }
+
+            let is_desired_enum = |e: &Enum| {
+                desired_enums.contains(&("GL_".to_string() + &e.ident))
+                    || desired_enums.contains(&("WGL_".to_string() + &e.ident))
+                    || desired_enums.contains(&("GLX_".to_string() + &e.ident))
+                    || desired_enums.contains(&("EGL_".to_string() + &e.ident))
+            };
+
+            let is_desired_cmd = |c: &Cmd| {
+                desired_cmds.contains(&("gl".to_string() + &c.proto.ident))
+                    || desired_cmds.contains(&("wgl".to_string() + &c.proto.ident))
+                    || desired_cmds.contains(&("glX".to_string() + &c.proto.ident))
+                    || desired_cmds.contains(&("egl".to_string() + &c.proto.ident))
+            };
+
+            let enums = enums.clone().into_iter().filter(is_desired_enum).collect();
+            let cmds = cmds.clone().into_iter().filter(is_desired_cmd).collect();
+
+            (enums, cmds)
         };
 
-        let is_desired_cmd = |c: &Cmd| {
-            desired_cmds.contains(&("gl".to_string() + &c.proto.ident))
-                || desired_cmds.contains(&("wgl".to_string() + &c.proto.ident))
-                || desired_cmds.contains(&("glX".to_string() + &c.proto.ident))
-                || desired_cmds.contains(&("egl".to_string() + &c.proto.ident))
-        };
+        let (load_enums, load_cmds) = get_funcs(true);
+        let (mut ptr_enums, mut ptr_cmds) = get_funcs(false);
+
+        ptr_enums.extend(load_enums.iter().cloned());
+        ptr_cmds.extend(load_cmds.iter().cloned());
 
         Registry {
             api: filter.api,
-            enums: enums.into_iter().filter(is_desired_enum).collect(),
-            cmds: cmds.into_iter().filter(is_desired_cmd).collect(),
+            load_enums,
+            load_cmds,
+            ptr_enums,
+            ptr_cmds,
             aliases: if filter.fallbacks == Fallbacks::None {
                 BTreeMap::new()
             } else {

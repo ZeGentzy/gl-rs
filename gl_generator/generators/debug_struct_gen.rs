@@ -77,7 +77,7 @@ fn write_enums<W>(registry: &Registry, dest: &mut W) -> io::Result<()>
 where
     W: io::Write,
 {
-    for enm in &registry.enums {
+    for enm in &registry.ptr_enums {
         try!(super::gen_enum_item(enm, "types::", dest));
     }
 
@@ -160,7 +160,7 @@ where
         api = super::gen_struct_name(registry.api)
     ));
 
-    for cmd in &registry.cmds {
+    for cmd in &registry.ptr_cmds {
         if let Some(v) = registry.aliases.get(&cmd.proto.ident) {
             try!(writeln!(dest, "/// Fallbacks: {}", v.join(", ")));
         }
@@ -206,7 +206,7 @@ where
                 {api} {{",
                   api = super::gen_struct_name(registry.api)));
 
-    for cmd in &registry.cmds {
+    for cmd in &registry.load_cmds {
         try!(writeln!(
             dest,
             "{name}: FnPtr::new(metaloadfn(\"{symbol}\", &[{fallbacks}])),",
@@ -230,7 +230,7 @@ where
         }}"
     ));
 
-    for cmd in &registry.cmds {
+    for cmd in &registry.load_cmds {
         let idents = super::gen_parameters(cmd, true, false);
         let typed_params = super::gen_parameters(cmd, false, true);
         let println = format!(
@@ -268,7 +268,7 @@ where
                       println = println,
                       print_err = if cmd.proto.ident != "GetError" &&
                                      registry
-                                         .cmds
+                                         .load_cmds
                                          .iter()
                                          .find(|cmd| cmd.proto.ident == "GetError")
                                          .is_some() {

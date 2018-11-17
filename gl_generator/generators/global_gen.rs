@@ -109,7 +109,7 @@ fn write_enums<W>(registry: &Registry, dest: &mut W) -> io::Result<()>
 where
     W: io::Write,
 {
-    for enm in &registry.enums {
+    for enm in &registry.ptr_enums {
         try!(super::gen_enum_item(enm, "types::", dest));
     }
 
@@ -124,7 +124,7 @@ fn write_fns<W>(registry: &Registry, dest: &mut W) -> io::Result<()>
 where
     W: io::Write,
 {
-    for cmd in &registry.cmds {
+    for cmd in &registry.ptr_cmds {
         if let Some(v) = registry.aliases.get(&cmd.proto.ident) {
             try!(writeln!(dest, "/// Fallbacks: {}", v.join(", ")));
         }
@@ -188,7 +188,7 @@ where
             use super::FnPtr;"
     ));
 
-    for c in &registry.cmds {
+    for c in &registry.ptr_cmds {
         try!(writeln!(
             dest,
             "pub static mut {name}: FnPtr = FnPtr {{
@@ -210,7 +210,7 @@ fn write_fn_mods<W>(registry: &Registry, dest: &mut W) -> io::Result<()>
 where
     W: io::Write,
 {
-    for c in &registry.cmds {
+    for c in &registry.ptr_cmds {
         let fallbacks = match registry.aliases.get(&c.proto.ident) {
             Some(v) => {
                 let names = v
@@ -287,7 +287,7 @@ where
         pub fn load_with<F>(mut loadfn: F) where F: FnMut(&'static str) -> *const __gl_imports::raw::c_void {{
     "));
 
-    for c in &registry.cmds {
+    for c in &registry.load_cmds {
         try!(writeln!(
             dest,
             "{cmd_name}::load_with(&mut loadfn);",
